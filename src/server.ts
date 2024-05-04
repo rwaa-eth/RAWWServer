@@ -5,9 +5,10 @@ import { ethers } from "ethers";
 import { INFURA_KEY, NAME_LIMIT } from "./constants";
 import fs from "fs";
 import cors from "@fastify/cors";
+import Redis from "ioredis";
 
 const CHALLENGE_STRINGS = ["Rwaa", "Landmass", "Kuiper", "Tractor", "Scythe"];
-
+const redis = new Redis();
 interface ChallengeEntry {
   challenge: string;
   timestamp: number;
@@ -62,7 +63,7 @@ const challenges: ChallengeEntry[] = [];
 // TODO: Alan replace with persistant storage
 const keyMapping: Map<number, string> = new Map(); // Document ID -> key
 
-const CONTRACT_ADDRESS = "0x5FbDB2315678afecb367f032d93F642f64180aa3";
+const CONTRACT_ADDRESS = "0x0A29BEDe4DE9524b36a210c92a9BEF7fd44BFCc8";
 
 const challengeExpiry = 60 * 60 * 2; // 2 minutes
 
@@ -73,10 +74,16 @@ async function createServer() {
 
   app = fastify({
     maxParamLength: 1024,
-    https: {
-      key: fs.readFileSync("/etc/letsencrypt/live/ra.ath.cx/privkey.pem"),
-      cert: fs.readFileSync("/etc/letsencrypt/live/ra.ath.cx/fullchain.pem"),
-    },
+    ...(process.env.NODE_ENV !== "development"
+      ? {
+          https: {
+            key: fs.readFileSync("/etc/letsencrypt/live/ra.ath.cx/privkey.pem"),
+            cert: fs.readFileSync(
+              "/etc/letsencrypt/live/ra.ath.cx/fullchain.pem"
+            ),
+          },
+        }
+      : {}),
   });
 
   await app.register(cors, {
@@ -110,7 +117,8 @@ async function createServer() {
       // get document id
       try {
         const documentId = await getDocumentId(numericTokenId);
-        const decryptKey = keyMapping.get(documentId); // TODO: Alan replace with persistant storage
+        // const decryptKey = keyMapping.get(documentId); // TODO: Alan replace with persistant storage
+        const decryptKey = await redis.get(`${numericTokenId}`);
         return { data: `${decryptKey}` };
       } catch (e) {
         return { data: `Document not found` };
@@ -125,7 +133,13 @@ async function createServer() {
     // @ts-ignore
     const { documentId, aesKey } = request.params;
     // TODO: Alan replace with persistant storage
-    keyMapping.set(parseInt(documentId), aesKey);
+    // keyMapping.set(parseInt(documentId), aesKey);
+    const setRes = await redis.set(`${documentId}`, `${aesKey}`);
+    const firstDigit = aesKey[0];
+    const lastDigit = aesKey[aesKey.length - 1];
+    console.log(
+      `setRes ${setRes} docId ${documentId} aesKey ${firstDigit}...${lastDigit}`
+    );
     return { data: `pass` };
   });
 
@@ -214,8 +228,7 @@ const start = async () => {
     const app = await createServer();
 
     const host = "0.0.0.0";
-    const port = 443;
-
+    const port = process.env.NODE_ENV === "development" ? 8080 : 443;
     await app.listen({ port, host });
     console.log(`Server is listening on ${host} ${port}`);
   } catch (err) {

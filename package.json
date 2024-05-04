@@ -6,7 +6,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/server.js",
-    "dev": "ts-node src/server.ts"
+    "dev": "NODE_ENV=development ts-node src/server.ts",
+    "prod": "NODE_ENV=production ts-node src/server.ts"
   },
   "keywords": [],
   "author": "",
@@ -15,7 +16,8 @@
     "@fastify/cors": "^9.0.1",
     "dotenv": "^16.4.5",
     "ethers": "^6.12.1",
-    "fastify": "^4.26.2"
+    "fastify": "^4.26.2",
+    "ioredis": "^5.4.1"
   },
   "devDependencies": {
     "@types/node": "^20.12.8",
