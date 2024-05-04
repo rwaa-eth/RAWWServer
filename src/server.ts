@@ -63,10 +63,9 @@ const challenges: ChallengeEntry[] = [];
 // TODO: Alan replace with persistant storage
 const keyMapping: Map<number, string> = new Map(); // Document ID -> key
 
-const CONTRACT_ADDRESS = "0x0A29BEDe4DE9524b36a210c92a9BEF7fd44BFCc8";
+const CONTRACT_ADDRESS = "0xb6a66d1B4C5627E2E7e72eE4Ec019de5a00830C2";
 
-const challengeExpiry = 60 * 60 * 2; // 2 minutes
-
+const challengeExpiry = 60 * 60 * 2 * 1000; // 2 hours in milliseconds
 async function createServer() {
   let app: FastifyInstance;
   //let lastError: string[] = [];
@@ -103,22 +102,30 @@ async function createServer() {
       "-" +
       Math.random().toString(36).substring(2, 15);
     challenges.push({ challenge, timestamp: Date.now() });
+    console.log("challenges", challenges);
     return { data: `${challenge}` };
   });
 
-  app.post(`/verify/:signature/:tokenId`, async (request, reply) => {
+  app.post(`/verify`, async (request, reply) => {
     //recover the address from the signature
     // @ts-ignore
-    const { signature, tokenId } = request.params;
+    const { signature, tokenId } = request.body;
+    console.log("verify", signature, tokenId);
+    console.log("challenges", challenges);
+
     const numericTokenId = parseInt(tokenId);
+    console.log("numericTokenId", numericTokenId);
+
     const ownsToken = await checkOwnership(signature, numericTokenId);
 
     if (ownsToken) {
       // get document id
       try {
         const documentId = await getDocumentId(numericTokenId);
+        console.log("documentId", `${documentId}`);
         // const decryptKey = keyMapping.get(documentId); // TODO: Alan replace with persistant storage
-        const decryptKey = await redis.get(`${numericTokenId}`);
+        const decryptKey = await redis.get(`${documentId}`);
+        console.log("decryptKey", decryptKey);
         return { data: `${decryptKey}` };
       } catch (e) {
         return { data: `Document not found` };
@@ -129,20 +136,29 @@ async function createServer() {
   });
 
   //https://ra.ath.cx/register/<DOCUMENTID>/<AES256 KEY>
-  app.get("/register/:documentId/:aesKey", async (request, reply) => {
+  app.post("/register-key", async (request, reply) => {
+    console.log("Received request for /register-key");
     // @ts-ignore
-    const { documentId, aesKey } = request.params;
+    const { docId, aesKey } = request.body;
+    console.log(`Received docId: ${docId}, aesKey: ${aesKey}`);
     // TODO: Alan replace with persistant storage
-    // keyMapping.set(parseInt(documentId), aesKey);
-    const setRes = await redis.set(`${documentId}`, `${aesKey}`);
+    // keyMapping.set(parseInt(docId), aesKey);
+    console.log("Setting key in Redis");
+    const setRes = await redis.set(`${docId}`, `${aesKey}`);
+    console.log(`Redis set result: ${setRes}`);
     const firstDigit = aesKey[0];
     const lastDigit = aesKey[aesKey.length - 1];
     console.log(
-      `setRes ${setRes} docId ${documentId} aesKey ${firstDigit}...${lastDigit}`
+      `First digit of aesKey: ${firstDigit}, Last digit of aesKey: ${lastDigit}`
     );
+    console.log(
+      `setRes ${setRes} docId ${docId} aesKey ${firstDigit}...${lastDigit}`
+    );
+    console.log("Returning success response");
     return { data: `pass` };
   });
 
+  console.log("Returning app from function");
   return app;
 }
 
@@ -158,9 +174,10 @@ async function getDocumentId(tokenId: number): Promise<number> {
 }
 
 function getProvider(useChainId: number): ethers.JsonRpcProvider | null {
+  console.log("getProvider useChainId", useChainId);
   const chainDetails: ChainDetail = CHAIN_DETAILS[useChainId];
 
-  //console.log(`CHAIN ${chainDetails.RPCurl} ${chainDetails.name} ${chainDetails.chainId}`);
+  console.log(`CHAIN chainDetails ${JSON.stringify(chainDetails)}`);
 
   if (chainDetails !== null) {
     return new ethers.JsonRpcProvider(chainDetails.RPCurl, {
@@ -178,15 +195,24 @@ async function checkOwnership(
 ): Promise<boolean> {
   //loop through all of the challenge strings which are still valid
   const tokenOwner = await getTokenOwner(tokenId);
-  console.log(`tokenOwner ${tokenOwner} ${tokenId}`);
+  console.log(`tokenOwner ${tokenOwner} tokenID ${tokenId}`);
+  console.log("challenges tokenOwner", challenges);
   for (let i = 0; i < challenges.length; i++) {
     const thisChallenge = challenges[i];
-    if (thisChallenge.timestamp + challengeExpiry < Date.now()) {
+    console.log(
+      "thisChallenge",
+      thisChallenge,
+      thisChallenge.timestamp + challengeExpiry > Date.now()
+    );
+    if (thisChallenge.timestamp + challengeExpiry > Date.now()) {
       //recover the address
       const address = ethers.verifyMessage(
         thisChallenge.challenge,
         addHexPrefix(signature)
       );
+      console.log("address", address);
+      console.log("tokenOwner", tokenOwner);
+
       if (address.toLowerCase() === tokenOwner.toLowerCase()) {
         //if the address matches the token owner, return true
         //remove entry from challenges
@@ -205,14 +231,23 @@ async function checkOwnership(
 }
 
 async function getTokenOwner(tokenId: number): Promise<string> {
+  console.log("getTokenOwner", tokenId);
   const provider = getProvider(11155111);
+  console.log("provider", provider);
+
   const queryContract = new ethers.Contract(
     CONTRACT_ADDRESS,
     ["function ownerOf(uint256 tokenId) view returns (address)"],
     provider
   );
 
-  return await queryContract.ownerOf(tokenId);
+  console.log("queryContract", queryContract);
+  try {
+    return await queryContract.ownerOf(tokenId);
+  } catch (e) {
+    console.log("error", e);
+    return "";
+  }
 }
 
 function addHexPrefix(hex: string): string {
