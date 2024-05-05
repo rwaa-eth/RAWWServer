@@ -63,7 +63,8 @@ const challenges: ChallengeEntry[] = [];
 // TODO: Alan replace with persistant storage
 const keyMapping: Map<number, string> = new Map(); // Document ID -> key
 
-const CONTRACT_ADDRESS = "0xb6a66d1B4C5627E2E7e72eE4Ec019de5a00830C2";
+const CONTRACT_ADDRESS =
+  process.env.CONTRACT_ADDRESS || "0xefAB18061C57C458c52661f50f5b83B600392ed6";
 
 const challengeExpiry = 60 * 60 * 2 * 1000; // 2 hours in milliseconds
 async function createServer() {
@@ -135,7 +136,7 @@ async function createServer() {
     }
   });
 
-  //https://ra.ath.cx/register/<DOCUMENTID>/<AES256 KEY>
+  //http://localhost:8080/register/<DOCUMENTID>/<AES256 KEY>
   app.post("/register-key", async (request, reply) => {
     console.log("Received request for /register-key");
     // @ts-ignore
