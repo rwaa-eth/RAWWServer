@@ -8,6 +8,7 @@ import cors from "@fastify/cors";
 import Redis from "ioredis";
 import path from "path";
 import { FastifyRequest } from "fastify";
+import multipart from '@fastify/multipart';
 
 const CHALLENGE_STRINGS = ["Rwaa", "Landmass", "Kuiper", "Tractor", "Scythe"];
 const redis = new Redis();
@@ -22,7 +23,7 @@ type ChainDetail = {
   chainId: number;
 };
 
-const SERVER_CHAIN_ID = 17000;
+const SERVER_CHAIN_ID = 11155931;
 
 const CHAIN_DETAILS: Record<number, ChainDetail> = {
   1: {
@@ -101,6 +102,8 @@ async function createServer() {
       : {}),
   });
 
+  app.register(multipart);
+
   await app.register(cors, {
     origin: "*",
     // put your options here
@@ -151,29 +154,45 @@ async function createServer() {
     }
   });
 
-  //accept multipart file upload
-  app.post("/register-file", async (request: FastifyRequest<{ Body: { file: any } }>, reply) => {
+  app.post("/register-file", async (request, reply) => {
     console.log("Received request for /register-file");
-    //wrap in try catch
+    const data = await request.file();
+    console.log("data", data);
+    return { data: `File received` };
+  });
+
+  //accept multipart file upload
+  /*app.post("/register-file", async (request, reply) => {
+    console.log("Received request for /register-file");
     try {
-    // now store the file in the downloads folder
-    const downloadsFolder = path.join(__dirname, "downloads");
-    if (!fs.existsSync(downloadsFolder)) {
-        fs.mkdirSync(downloadsFolder);
-    }
-    // now store the file in the downloads folder
-    const filePath = path.join(downloadsFolder, request.body.file.filename); // Change request.file to request.body.file
-    fs.writeFileSync(filePath, request.body.file.data); // Change request.file to request.body.file
+      const data = await request.multipart(async (field, file) => {
+        // Handle the file upload
+        if (field === 'file') {
+          // now store the file in the downloads folder
+          const downloadsFolder = path.join(__dirname, "downloads");
+          if (!fs.existsSync(downloadsFolder)) {
+            fs.mkdirSync(downloadsFolder);
+          }
+
+          //now store the file in the downloads folder
+          const filePath = path.join(downloadsFolder, file.filename);
+          fs.writeFileSync(filePath, file.data);
+
+          //now need to use ethers to create a hash of the file
+    //const filePath = path.join(downloadsFolder, request.body.file.filename); // Change request.file to request.body.file
+    //fs.writeFileSync(filePath, request.body.file.data); // Change request.file to request.body.file
 
     //now need to use ethers to create a hash of the file
     const fileHash = ethers.keccak256(fs.readFileSync(filePath));
     console.log("fileHash", fileHash);
     // now return the file hash
-      return { data: `${fileHash}` };
+        return { data: `${fileHash}` };
+      }
+    }) 
     } catch (e) {
       return reply.status(500).send({ data: `Error processing file` });
     }
-  });
+  });*/
 
   //http://localhost:8080/register/<DOCUMENTID>/<AES256 KEY>
   app.post("/register-key", async (request, reply) => {
