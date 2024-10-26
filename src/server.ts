@@ -88,14 +88,28 @@ async function createServer() {
   //let lastError: string[] = [];
   //let coinTypeRoute: string[] = [];
 
+  // app = fastify({
+  //   maxParamLength: 1024,
+  //   ...(process.env.NODE_ENV !== "development"
+  //     ? {
+  //         https: {
+  //           key: fs.readFileSync("/etc/letsencrypt/live/ra.ath.cx/privkey.pem"),
+  //           cert: fs.readFileSync(
+  //             "/etc/letsencrypt/live/ra.ath.cx/fullchain.pem"
+  //           ),
+  //         },
+  //       }
+  //     : {}),
+  // });
+
   app = fastify({
     maxParamLength: 1024,
     ...(process.env.NODE_ENV !== "development"
       ? {
           https: {
-            key: fs.readFileSync("/etc/letsencrypt/live/ra.ath.cx/privkey.pem"),
+            key: fs.readFileSync("/etc/letsencrypt/live/scriptproxy.smarttokenlabs.com/privkey.pem"),
             cert: fs.readFileSync(
-              "/etc/letsencrypt/live/ra.ath.cx/fullchain.pem"
+              "/etc/letsencrypt/live/scriptproxy.smarttokenlabs.com/fullchain.pem"
             ),
           },
         }
@@ -156,9 +170,29 @@ async function createServer() {
 
   app.post("/register-file", async (request, reply) => {
     console.log("Received request for /register-file");
-    const data = await request.file();
-    console.log("data", data);
-    return { data: `File received` };
+    try {
+      const downloadsFolder = path.join(__dirname, "downloads");
+      if (!fs.existsSync(downloadsFolder)) {
+            fs.mkdirSync(downloadsFolder);
+      }
+      const data = await request.file();
+      if (!data) {
+        return reply.status(400).send({ data: `No file data received` });
+      }
+      const fileBuffer = await data.toBuffer();
+      const fileHash = ethers.keccak256(fs.readFileSync(fileBuffer));
+      console.log("fileHash", fileHash);
+
+      const filePath = path.join(downloadsFolder, fileHash);
+      
+      //store the file in the downloads folder
+      fs.writeFileSync(filePath, fileHash);
+
+      //now return the file hash
+      return { data: `${fileHash}` };
+    } catch (e) {
+      return reply.status(500).send({ data: `Error processing file` });
+    }
   });
 
   //accept multipart file upload
@@ -322,7 +356,7 @@ const start = async () => {
     const app = await createServer();
 
     const host = "0.0.0.0";
-    const port = process.env.NODE_ENV === "development" ? 8080 : 443;
+    const port = process.env.NODE_ENV === "development" ? 8080 : 8086;
     await app.listen({ port, host });
     console.log(`Server is listening on ${host} ${port}`);
   } catch (err) {
