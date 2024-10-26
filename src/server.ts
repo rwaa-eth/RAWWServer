@@ -6,6 +6,8 @@ import { INFURA_KEY, NAME_LIMIT } from "./constants";
 import fs from "fs";
 import cors from "@fastify/cors";
 import Redis from "ioredis";
+import path from "path";
+import { FastifyRequest } from "fastify";
 
 const CHALLENGE_STRINGS = ["Rwaa", "Landmass", "Kuiper", "Tractor", "Scythe"];
 const redis = new Redis();
@@ -19,6 +21,8 @@ type ChainDetail = {
   RPCurl: string;
   chainId: number;
 };
+
+const SERVER_CHAIN_ID = 17000;
 
 const CHAIN_DETAILS: Record<number, ChainDetail> = {
   1: {
@@ -35,6 +39,11 @@ const CHAIN_DETAILS: Record<number, ChainDetail> = {
     name: "sepolia",
     RPCurl: `https://sepolia.infura.io/v3/${INFURA_KEY}`,
     chainId: 11155111,
+  },
+  17000: {
+    name: "holesky",
+    RPCurl: `https://holesky.infura.io/v3/${INFURA_KEY}`,
+    chainId: 17000,
   },
   42161: {
     name: "arbitrum-mainnet",
@@ -56,6 +65,12 @@ const CHAIN_DETAILS: Record<number, ChainDetail> = {
     RPCurl: `https://optimism-mainnet.infura.io/v3/${INFURA_KEY}`,
     chainId: 10,
   },
+  11155931: {
+		RPCurl: 'https://testnet.riselabs.xyz',
+		name: 'rise-sepolia',
+    chainId: 11155931,
+	},
+
 };
 
 const challenges: ChallengeEntry[] = [];
@@ -136,6 +151,30 @@ async function createServer() {
     }
   });
 
+  //accept multipart file upload
+  app.post("/register-file", async (request: FastifyRequest<{ Body: { file: any } }>, reply) => {
+    console.log("Received request for /register-file");
+    //wrap in try catch
+    try {
+    // now store the file in the downloads folder
+    const downloadsFolder = path.join(__dirname, "downloads");
+    if (!fs.existsSync(downloadsFolder)) {
+        fs.mkdirSync(downloadsFolder);
+    }
+    // now store the file in the downloads folder
+    const filePath = path.join(downloadsFolder, request.body.file.filename); // Change request.file to request.body.file
+    fs.writeFileSync(filePath, request.body.file.data); // Change request.file to request.body.file
+
+    //now need to use ethers to create a hash of the file
+    const fileHash = ethers.keccak256(fs.readFileSync(filePath));
+    console.log("fileHash", fileHash);
+    // now return the file hash
+      return { data: `${fileHash}` };
+    } catch (e) {
+      return reply.status(500).send({ data: `Error processing file` });
+    }
+  });
+
   //http://localhost:8080/register/<DOCUMENTID>/<AES256 KEY>
   app.post("/register-key", async (request, reply) => {
     console.log("Received request for /register-key");
@@ -164,7 +203,7 @@ async function createServer() {
 }
 
 async function getDocumentId(tokenId: number): Promise<number> {
-  const provider = getProvider(11155111);
+  const provider = getProvider(SERVER_CHAIN_ID);
   const queryContract = new ethers.Contract(
     CONTRACT_ADDRESS,
     ["function getDocIdbyTokenId(uint256 tokenId) view returns (uint256)"],
@@ -233,7 +272,7 @@ async function checkOwnership(
 
 async function getTokenOwner(tokenId: number): Promise<string> {
   console.log("getTokenOwner", tokenId);
-  const provider = getProvider(11155111);
+  const provider = getProvider(SERVER_CHAIN_ID);
   console.log("provider", provider);
 
   const queryContract = new ethers.Contract(
