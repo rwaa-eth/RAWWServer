@@ -180,17 +180,24 @@ async function createServer() {
         return reply.status(400).send({ data: `No file data received` });
       }
       const fileBuffer = await data.toBuffer();
-      const fileHash = ethers.keccak256(fs.readFileSync(fileBuffer));
-      console.log("fileHash", fileHash);
+      //const fileHash = ethers.keccak256(fs.readFileSync(fileBuffer));
+      //console.log(`fileHash` , fileHash);
 
-      const filePath = path.join(downloadsFolder, fileHash);
+
+      const filePath = path.join(downloadsFolder, data.filename);
+      console.log(`filePath` , filePath);
       
       //store the file in the downloads folder
-      fs.writeFileSync(filePath, fileHash);
+      fs.writeFileSync(filePath, fileBuffer);
+
+      //now calculate the hash of the file
+      const fileHash = ethers.keccak256(fs.readFileSync(filePath));
+      console.log(`fileHash` , fileHash);
 
       //now return the file hash
       return { data: `${fileHash}` };
     } catch (e) {
+      console.log("error", e);
       return reply.status(500).send({ data: `Error processing file` });
     }
   });
