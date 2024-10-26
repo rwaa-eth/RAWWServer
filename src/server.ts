@@ -194,6 +194,9 @@ async function createServer() {
       const fileHash = ethers.keccak256(fs.readFileSync(filePath));
       console.log(`fileHash` , fileHash);
 
+      //now rename the file to the hash
+      fs.renameSync(filePath, path.join(downloadsFolder, fileHash));
+
       //now return the file hash
       return { data: `${fileHash}` };
     } catch (e) {
